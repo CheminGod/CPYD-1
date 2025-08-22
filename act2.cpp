@@ -1,59 +1,76 @@
 #include <iostream>
 #include <thread>
+#include <vector>
+#include <memory>  
 #include <cstdlib>
 #include <ctime>
 #include <mutex>
 #include <random>
 
-int results[10]; 
-std::mutex mtx;  
+std::mutex mtx;
 
+class ThreadSum {
+private:
+    int id;
+    int sum;
 
-void generate(int id) {
-    
-    std::random_device rd;  
-    std::mt19937 gen(rd()); 
-    std::uniform_int_distribution<> dis(0, 1000); 
+public:
+    ThreadSum(int thread_id) : id(thread_id), sum(0) {}
 
-    int sum = 0;
-    for (int i = 0; i < 100; i++) {
-        int num = dis(gen); 
-        sum += num;
+    int getSum() const {
+        return sum;
     }
-    results[id] = sum;
 
-    {
+    int getId() const {
+        return id;
+    }
+
+    void generate() {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, 1000);
+
+        for (int i = 0; i < 100; i++) {
+            sum += dis(gen);
+        }
+
         std::lock_guard<std::mutex> lock(mtx);
-        std::cout << "Thread " << id + 1 << " obtuvo suma = " << sum << std::endl;
+        std::cout << "El Thread " << id + 1 << " obtuvo una suma = " << sum << std::endl;
     }
-}
+};
 
 int main() {
-    srand(time(0)); 
-    std::thread threads[10];
+   
+    std::vector<std::unique_ptr<ThreadSum>> thread_sums;
+    std::vector<std::thread> threads;
 
     // lanzar los 10 threads
-    for (int i = 0; i < 10; i++) {
-        threads[i] = std::thread(generate, i);
+
+    for (int i = 0; i < 10; ++i) {
+        thread_sums.emplace_back(std::make_unique<ThreadSum>(i));
+        threads.emplace_back(&ThreadSum::generate, thread_sums[i].get());
     }
 
     // esperar que terminen
-    for (int i = 0; i < 10; i++) {
-        threads[i].join();
+
+    for (std::thread &t : threads) {
+        t.join();
     }
 
     // encontrar el ganador
-    int maxScore = results[0];
-    int bestThread = 0;
-    for (int i = 1; i < 10; i++) {
-        if (results[i] > maxScore) {
-            maxScore = results[i];
-            bestThread = i + 1;
+
+    int maxScore = 0;
+    int bestThreadId = -1;
+
+    for (const auto& thread_sum : thread_sums) {
+        if (thread_sum->getSum() > maxScore) {
+            maxScore = thread_sum->getSum();
+            bestThreadId = thread_sum->getId();
         }
     }
 
     std::cout << "\nEl thread con la puntuacion mas alta fue el Thread "
-              << bestThread << " con suma = " << maxScore << std::endl;
+              << bestThreadId + 1 << " con una suma = " << maxScore << std::endl;
 
     return 0;
 }
